@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>shortlink — paste, shorten, share</title>
+    <meta name="description" content="Custom URL shortener dashboard. Paste a long URL, get a short one, download the QR code." />
+    <link rel="icon" href="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2360a5fa' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72'/%3E%3Cpath d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.72'/%3E%3C/svg%3E" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: [
+                'ui-sans-serif',
+                'system-ui',
+                '-apple-system',
+                'BlinkMacSystemFont',
+                'Segoe UI',
+                'Roboto',
+                'Helvetica Neue',
+                'Arial',
+                'sans-serif',
+              ],
+              mono: [
+                'ui-monospace',
+                'SFMono-Regular',
+                'Menlo',
+                'Monaco',
+                'Consolas',
+                'Liberation Mono',
+                'Courier New',
+                'monospace',
+              ],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      [x-cloak] {
+        display: none !important;
+      }
+      body {
+        background:
+          radial-gradient(1200px 600px at 10% -10%, rgba(96, 165, 250, 0.12), transparent 60%),
+          radial-gradient(1000px 500px at 90% 0%, rgba(167, 139, 250, 0.10), transparent 55%),
+          #0b1020;
+      }
+    </style>
+    <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  </head>
+  <body class="min-h-screen text-slate-100 font-sans antialiased">
+    <main
+      x-data="shortlinkApp()"
+      x-init="loadLinks()"
+      class="mx-auto max-w-3xl px-4 sm:px-6 py-10 sm:py-14"
+    >
+      <header class="mb-8 sm:mb-10">
+        <div class="flex items-center gap-3">
+          <span
+            class="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/15 ring-1 ring-blue-400/30"
+            aria-hidden="true"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-5 w-5 text-blue-300" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.72" />
+            </svg>
+          </span>
+          <h1 class="text-xl font-semibold tracking-tight">shortlink</h1>
+        </div>
+        <p class="mt-3 text-sm text-slate-400">
+          Paste a long URL, get a short one. Optionally pick a custom alias or an expiration. Every redirect is logged for analytics.
+        </p>
+      </header>
+
+      <!-- Shorten card -->
+      <section
+        class="rounded-2xl bg-slate-900/60 ring-1 ring-white/10 shadow-xl shadow-black/20 backdrop-blur p-5 sm:p-7"
+      >
+        <form @submit.prevent="submit()" class="space-y-4">
+          <div>
+            <label for="longUrl" class="block text-xs font-medium uppercase tracking-wider text-slate-400">
+              Long URL
+            </label>
+            <input
+              id="longUrl"
+              type="url"
+              required
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="https://example.com/some/really/long/path?utm=launch"
+              x-model="form.longUrl"
+              class="mt-1.5 block w-full rounded-lg border-0 bg-slate-950/70 px-3.5 py-2.5 text-slate-100 placeholder-slate-500 ring-1 ring-white/10 focus:ring-2 focus:ring-blue-400 focus:outline-none text-sm"
+            />
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label for="customAlias" class="block text-xs font-medium uppercase tracking-wider text-slate-400">
+                Custom alias <span class="font-normal normal-case text-slate-500">(optional)</span>
+              </label>
+              <div class="mt-1.5 flex rounded-lg ring-1 ring-white/10 focus-within:ring-2 focus-within:ring-blue-400 bg-slate-950/70 overflow-hidden">
+                <span class="inline-flex select-none items-center pl-3.5 pr-1 text-slate-500 text-sm font-mono">
+                  /
+                </span>
+                <input
+                  id="customAlias"
+                  type="text"
+                  autocomplete="off"
+                  spellcheck="false"
+                  pattern="[A-Za-z0-9][A-Za-z0-9_-]{2,29}"
+                  placeholder="my-promo"
+                  x-model="form.customAlias"
+                  class="block w-full border-0 bg-transparent py-2.5 pr-3 text-slate-100 placeholder-slate-500 focus:outline-none text-sm font-mono"
+                />
+              </div>
+              <p class="mt-1 text-xs text-slate-500">3–30 chars. Letters, digits, <code>-</code>, <code>_</code>.</p>
+            </div>
+
+            <div>
+              <label for="expiresAt" class="block text-xs font-medium uppercase tracking-wider text-slate-400">
+                Expires at <span class="font-normal normal-case text-slate-500">(optional)</span>
+              </label>
+              <input
+                id="expiresAt"
+                type="datetime-local"
+                x-model="form.expiresAt"
+                class="mt-1.5 block w-full rounded-lg border-0 bg-slate-950/70 px-3.5 py-2.5 text-slate-100 placeholder-slate-500 ring-1 ring-white/10 focus:ring-2 focus:ring-blue-400 focus:outline-none text-sm"
+              />
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 pt-1">
+            <button
+              type="submit"
+              :disabled="busy"
+              class="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              <svg x-show="busy" class="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"></path>
+              </svg>
+              <span x-text="busy ? 'Shortening…' : 'Shorten'"></span>
+            </button>
+            <button
+              type="button"
+              @click="reset()"
+              x-show="result || error"
+              class="text-xs font-medium text-slate-400 hover:text-slate-200"
+            >
+              Clear
+            </button>
+          </div>
+
+          <!-- Error banner -->
+          <div
+            x-show="error"
+            x-cloak
+            x-transition.opacity
+            role="alert"
+            class="mt-2 rounded-lg bg-rose-500/10 ring-1 ring-rose-400/30 px-3.5 py-2.5 text-sm text-rose-200"
+          >
+            <span class="font-semibold" x-text="error?.code"></span>
+            <span class="text-rose-200/80" x-text="' — ' + (error?.message ?? '')"></span>
+          </div>
+        </form>
+      </section>
+
+      <!-- Result card -->
+      <section
+        x-show="result"
+        x-cloak
+        x-transition
+        class="mt-5 rounded-2xl bg-emerald-500/[0.07] ring-1 ring-emerald-400/20 p-5 sm:p-6"
+      >
+        <div class="flex flex-col sm:flex-row sm:items-center sm:gap-6 gap-4">
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-medium uppercase tracking-wider text-emerald-300/80">Short URL</p>
+            <div class="mt-1 flex items-center gap-2">
+              <a
+                :href="result?.shortUrl"
+                target="_blank"
+                rel="noopener"
+                class="truncate text-base sm:text-lg font-mono text-emerald-200 hover:text-white underline-offset-4 hover:underline"
+                x-text="result?.shortUrl"
+              ></a>
+            </div>
+            <p class="mt-2 text-xs text-slate-400 truncate">
+              redirects to <span class="font-mono text-slate-300" x-text="result?.longUrl"></span>
+            </p>
+            <div class="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                @click="copy(result?.shortUrl)"
+                class="inline-flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-xs font-medium text-slate-100 hover:bg-white/15 ring-1 ring-white/10"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="13" height="13" x="9" y="9" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                <span x-text="copied === result?.shortUrl ? 'Copied!' : 'Copy'"></span>
+              </button>
+              <a
+                :href="qrUrl(result?.shortCode)"
+                download
+                class="inline-flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-xs font-medium text-slate-100 hover:bg-white/15 ring-1 ring-white/10"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2h-4"/><path d="M3 15v4a2 2 0 0 0 2 2h4"/><path d="M21 9V5a2 2 0 0 0-2-2h-4"/><path d="M3 9V5a2 2 0 0 1 2-2h4"/></svg>
+                Download QR
+              </a>
+              <a
+                :href="result?.shortUrl"
+                target="_blank"
+                rel="noopener"
+                class="inline-flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-xs font-medium text-slate-100 hover:bg-white/15 ring-1 ring-white/10"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>
+                Open
+              </a>
+            </div>
+          </div>
+          <div class="shrink-0 self-center sm:self-start">
+            <div class="rounded-xl bg-white p-2.5 ring-1 ring-white/10">
+              <img
+                :src="qrUrl(result?.shortCode)"
+                alt="QR code for the short URL"
+                width="128"
+                height="128"
+                class="h-32 w-32"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Recent links -->
+      <section class="mt-10">
+        <div class="flex items-end justify-between mb-3">
+          <h2 class="text-sm font-semibold text-slate-200">Your recent links</h2>
+          <button
+            type="button"
+            @click="loadLinks()"
+            class="text-xs font-medium text-slate-400 hover:text-slate-200"
+          >
+            Refresh
+          </button>
+        </div>
+
+        <div
+          class="rounded-2xl bg-slate-900/40 ring-1 ring-white/10 overflow-hidden"
+        >
+          <template x-if="!loadingLinks && links.length === 0">
+            <div class="px-5 py-10 text-center text-sm text-slate-500">
+              No links yet. Shorten one above.
+            </div>
+          </template>
+
+          <template x-if="loadingLinks">
+            <div class="px-5 py-10 text-center text-sm text-slate-500">
+              Loading…
+            </div>
+          </template>
+
+          <template x-if="!loadingLinks && links.length > 0">
+            <ul class="divide-y divide-white/5">
+              <template x-for="link in links" :key="link.id">
+                <li class="px-4 sm:px-5 py-3.5">
+                  <div class="flex items-start gap-3">
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <a
+                          :href="link.shortUrl"
+                          target="_blank"
+                          rel="noopener"
+                          class="font-mono text-sm text-blue-300 hover:text-blue-200 underline-offset-4 hover:underline"
+                          x-text="'/' + link.shortCode"
+                        ></a>
+                        <span
+                          x-show="link.customAlias"
+                          class="inline-flex items-center rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300 ring-1 ring-violet-400/20"
+                        >alias</span>
+                        <span
+                          x-show="link.expiresAt && new Date(link.expiresAt) <= new Date()"
+                          class="inline-flex items-center rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-medium text-rose-300 ring-1 ring-rose-400/20"
+                        >expired</span>
+                      </div>
+                      <p
+                        class="mt-0.5 truncate text-xs text-slate-400"
+                        x-text="link.longUrl"
+                        :title="link.longUrl"
+                      ></p>
+                      <div class="mt-1 flex items-center gap-3 text-[11px] text-slate-500">
+                        <span x-text="link.clicks + (link.clicks === 1 ? ' click' : ' clicks')"></span>
+                        <span aria-hidden="true">·</span>
+                        <span x-text="formatTime(link.createdAt)"></span>
+                        <template x-if="link.expiresAt">
+                          <span class="flex items-center gap-3">
+                            <span aria-hidden="true">·</span>
+                            <span>expires <span x-text="formatTime(link.expiresAt)"></span></span>
+                          </span>
+                        </template>
+                      </div>
+                    </div>
+                    <div class="shrink-0 flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        @click="copy(link.shortUrl)"
+                        :title="'Copy ' + link.shortUrl"
+                        class="rounded-md bg-white/5 px-2 py-1 text-[11px] text-slate-300 hover:bg-white/10 ring-1 ring-white/10"
+                      >
+                        <span x-text="copied === link.shortUrl ? 'Copied' : 'Copy'"></span>
+                      </button>
+                      <a
+                        :href="qrUrl(link.shortCode)"
+                        download
+                        title="Download QR code"
+                        class="rounded-md bg-white/5 px-2 py-1 text-[11px] text-slate-300 hover:bg-white/10 ring-1 ring-white/10"
+                      >QR</a>
+                    </div>
+                  </div>
+                </li>
+              </template>
+            </ul>
+          </template>
+        </div>
+
+        <p
+          x-show="totalLinks > links.length"
+          x-cloak
+          class="mt-3 text-xs text-slate-500"
+        >
+          Showing <span x-text="links.length"></span> of <span x-text="totalLinks"></span>. Older links are paginated via <code class="text-slate-400">GET /api/links?limit=&amp;offset=</code>.
+        </p>
+      </section>
+
+      <footer class="mt-12 text-center text-xs text-slate-600">
+        <a
+          href="https://github.com/touhidul4052-gif/shortlink"
+          target="_blank"
+          rel="noopener"
+          class="hover:text-slate-400"
+          >source on github</a
+        >
+      </footer>
+    </main>
+
+    <script>
+      function shortlinkApp() {
+        return {
+          form: { longUrl: '', customAlias: '', expiresAt: '' },
+          busy: false,
+          result: null,
+          error: null,
+          copied: null,
+          links: [],
+          totalLinks: 0,
+          loadingLinks: false,
+          async submit() {
+            this.busy = true;
+            this.error = null;
+            this.result = null;
+            try {
+              const payload = { longUrl: this.form.longUrl };
+              if (this.form.customAlias) {
+                payload.customAlias = this.form.customAlias;
+              }
+              if (this.form.expiresAt) {
+                const d = new Date(this.form.expiresAt);
+                if (!Number.isNaN(d.getTime())) {
+                  payload.expiresAt = d.toISOString();
+                }
+              }
+              const resp = await fetch('/api/shorten', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+              const body = await resp.json().catch(() => ({}));
+              if (!resp.ok) {
+                this.error = body?.error ?? {
+                  code: 'request_failed',
+                  message: 'Could not shorten this URL (HTTP ' + resp.status + ')',
+                };
+                return;
+              }
+              this.result = body;
+              this.form.customAlias = '';
+              this.form.expiresAt = '';
+              this.loadLinks();
+            } catch (err) {
+              this.error = {
+                code: 'network_error',
+                message: err?.message ?? 'Network request failed',
+              };
+            } finally {
+              this.busy = false;
+            }
+          },
+          reset() {
+            this.form = { longUrl: '', customAlias: '', expiresAt: '' };
+            this.result = null;
+            this.error = null;
+          },
+          async loadLinks() {
+            this.loadingLinks = true;
+            try {
+              const resp = await fetch('/api/links?limit=20');
+              if (!resp.ok) return;
+              const data = await resp.json();
+              this.links = data.items ?? [];
+              this.totalLinks = data.total ?? this.links.length;
+            } catch {
+              // best-effort
+            } finally {
+              this.loadingLinks = false;
+            }
+          },
+          qrUrl(code) {
+            if (!code) return '';
+            return '/api/qr/' + encodeURIComponent(code);
+          },
+          async copy(value) {
+            if (!value) return;
+            try {
+              await navigator.clipboard.writeText(value);
+              this.copied = value;
+              setTimeout(() => {
+                if (this.copied === value) this.copied = null;
+              }, 1500);
+            } catch {
+              // ignore; user can still select + copy manually
+            }
+          },
+          formatTime(iso) {
+            if (!iso) return '';
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return '';
+            const now = new Date();
+            const diffMs = d.getTime() - now.getTime();
+            const past = diffMs < 0;
+            const absSeconds = Math.abs(diffMs) / 1000;
+            const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+            const fmt = (value, unit) =>
+              rtf.format(past ? -Math.round(value) : Math.round(value), unit);
+            if (absSeconds < 60) return past ? 'just now' : 'in a moment';
+            if (absSeconds < 3600) return fmt(absSeconds / 60, 'minute');
+            if (absSeconds < 86400) return fmt(absSeconds / 3600, 'hour');
+            if (absSeconds < 604800) return fmt(absSeconds / 86400, 'day');
+            return d.toLocaleDateString();
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

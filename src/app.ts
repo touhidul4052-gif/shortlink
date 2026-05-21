@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express, { type Express } from 'express';
 import pinoHttp from 'pino-http';
 import { logger } from './utils/logger.js';
@@ -5,6 +7,10 @@ import { apiRouter } from './routes/api.js';
 import { redirectRouter } from './routes/redirect.js';
 import { healthRouter } from './routes/health.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+// `here` is dist/ at runtime; the static assets live at <repo>/public.
+const PUBLIC_DIR = path.resolve(here, '..', 'public');
 
 export function createApp(): Express {
   const app = express();
@@ -25,6 +31,13 @@ export function createApp(): Express {
 
   app.use(healthRouter);
   app.use('/api', apiRouter);
+  app.use(
+    express.static(PUBLIC_DIR, {
+      index: 'index.html',
+      fallthrough: true,
+      maxAge: '1h',
+    }),
+  );
   app.use(redirectRouter);
 
   app.use(notFoundHandler);

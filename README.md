@@ -1,20 +1,22 @@
 # shortlink
 
-Phase 1 implementation of a custom URL shortener:
+A tiny, fast URL shortener built with Node.js + Express + Postgres.
 
+- **Web dashboard** — paste a long URL, get a short one, see the QR, browse recent links
 - **Base62 short-code engine** with configurable padding and ID offset
-- **POST `/api/shorten`** — accepts a long URL, optional custom alias, and
-  optional `expiresAt`; validates, canonicalizes, persists, and returns the
-  short URL
+- **POST `/api/shorten`** — long URL → short URL with optional custom alias and `expiresAt`
 - **GET `/:short_code`** — fast lookup with expiration check, asynchronous
   click logging, bot filtering, and configurable 301/302 redirect
+- **GET `/api/links`** — paginated list of recent links with click counts
+- **GET `/api/qr/:code`** — downloadable SVG QR code for any short link
 - **Postgres schema** (`links`, `link_analytics`) with `node-pg-migrate`
   migrations and partial unique index on `short_code`
 - **Analytics** — async click events capturing referrer, user agent, device
   classification, and IP; bot user agents are skipped so totals stay clean
-- **Tests** — Vitest unit tests for the Base62, URL, slug, and analytics
-  utilities; Supertest integration tests covering the shorten + redirect
-  flows against a real Postgres database
+- **Tests** — Vitest unit tests + Supertest integration tests against a real
+  Postgres database (46 tests, run on every push via GitHub Actions)
+
+![Dashboard](docs/dashboard.png)
 
 ## Quick start
 
@@ -78,6 +80,23 @@ curl -I http://localhost:3000/0003e9
 # Location: https://example.com/some/long/path?utm=launch
 ```
 
+### Or just use the dashboard
+
+Open `http://localhost:3000/` in a browser. You get a single-page dashboard
+(Tailwind + Alpine.js, no build pipeline) that wraps the API:
+
+- Paste a long URL → click **Shorten** → copy the result or download its QR
+- Optional custom alias (3–30 chars, `^[A-Za-z0-9][A-Za-z0-9_-]*$`)
+- Optional expiration timestamp (`datetime-local`, stored as ISO-8601)
+- "Your recent links" table with click counts, auto-refreshing on each new shorten
+
+### List recent links + grab a QR code
+
+```bash
+curl http://localhost:3000/api/links?limit=10&offset=0
+curl http://localhost:3000/api/qr/0003e9 > qr.svg
+```
+
 ## Configuration
 
 | Variable                | Default                                                 | Notes |
@@ -109,7 +128,7 @@ curl -I http://localhost:3000/0003e9
 src/
   config/env.ts          # zod-validated env loader
   db/pool.ts             # pg.Pool singleton
-  routes/api.ts          # POST /api/shorten
+  routes/api.ts          # POST /api/shorten, GET /api/links, GET /api/qr/:code
   routes/redirect.ts     # GET /:short_code
   routes/health.ts       # GET /health, GET /health/ready
   services/links.service.ts
@@ -118,8 +137,10 @@ src/
   utils/url.ts           # canonicalize + validate
   utils/slug.ts          # custom alias validation + reserved words
   middleware/error.ts    # centralized error mapper
-  app.ts                 # Express app factory
+  app.ts                 # Express app factory (serves /api + static /)
   server.ts              # entrypoint
+public/
+  index.html             # dashboard (Tailwind via CDN + Alpine.js)
 migrations/
   1700000000000_init.cjs # links + link_analytics tables and indexes
 tests/
@@ -129,9 +150,8 @@ tests/
 
 ## Roadmap
 
-This PR ships **Phase 1** (engine + redirect). Subsequent phases will add:
+Phases 1 + 2 are shipped (engine + redirect + dashboard UI). Future phases:
 
-- Phase 2: Custom-alias dashboard UI, QR codes, link-in-bio
 - Phase 3: Developer API with bearer-token auth + per-key rate limits
 - Phase 4: Granular analytics dashboards, geolocation, security hardening
 
