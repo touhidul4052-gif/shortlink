@@ -13,6 +13,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 COPY migrations ./migrations
+COPY public ./public
 EXPOSE 3000
 USER node
 CMD ["node", "dist/server.js"]

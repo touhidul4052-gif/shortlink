@@ -167,3 +167,101 @@ describe('GET /:short_code', () => {
     expect(rows[0]?.referrer).toBe('https://twitter.com/');
   });
 });
+
+describe('GET /api/links', () => {
+  it('returns recent links newest-first with pagination metadata', async () => {
+    const a = await request(app)
+      .post('/api/shorten')
+      .send({ longUrl: 'https://example.com/a' });
+    const b = await request(app)
+      .post('/api/shorten')
+      .send({ longUrl: 'https://example.com/b' });
+    const c = await request(app)
+      .post('/api/shorten')
+      .send({ longUrl: 'https://example.com/c' });
+
+    const res = await request(app).get('/api/links');
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(3);
+    expect(res.body.limit).toBe(20);
+    expect(res.body.offset).toBe(0);
+    expect(res.body.items).toHaveLength(3);
+    expect(res.body.items[0].shortCode).toBe(c.body.shortCode);
+    expect(res.body.items[1].shortCode).toBe(b.body.shortCode);
+    expect(res.body.items[2].shortCode).toBe(a.body.shortCode);
+    expect(res.body.items[0].clicks).toBe(0);
+    expect(res.body.items[0].shortUrl).toContain(c.body.shortCode);
+  });
+
+  it('honors limit and offset', async () => {
+    for (let i = 0; i < 5; i += 1) {
+      await request(app)
+        .post('/api/shorten')
+        .send({ longUrl: `https://example.com/p${i}` });
+    }
+
+    const page1 = await request(app).get('/api/links?limit=2&offset=0');
+    expect(page1.status).toBe(200);
+    expect(page1.body.items).toHaveLength(2);
+    expect(page1.body.limit).toBe(2);
+    expect(page1.body.offset).toBe(0);
+    expect(page1.body.total).toBe(5);
+
+    const page2 = await request(app).get('/api/links?limit=2&offset=2');
+    expect(page2.status).toBe(200);
+    expect(page2.body.items).toHaveLength(2);
+    expect(page2.body.items[0].shortCode).not.toBe(page1.body.items[0].shortCode);
+  });
+
+  it('rejects invalid pagination params with 400', async () => {
+    const res = await request(app).get('/api/links?limit=0');
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('validation_error');
+  });
+});
+
+describe('GET /api/qr/:code', () => {
+  it('returns an SVG QR code for a known short link', async () => {
+    const created = await request(app)
+      .post('/api/shorten')
+      .send({ longUrl: 'https://example.com/qr' });
+
+    const res = await request(app)
+      .get(`/api/qr/${created.body.shortCode}`)
+      .buffer(true)
+      .parse((response, callback) => {
+        let data = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          data += chunk;
+        });
+        response.on('end', () => callback(null, data));
+      });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/image\/svg\+xml/);
+    const body = res.body as unknown as string;
+    expect(body).toContain('<svg');
+    expect(body).toContain('</svg>');
+  });
+
+  it('returns 404 for an unknown short code', async () => {
+    const res = await request(app).get('/api/qr/nope-nope-nope');
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('not_found');
+  });
+
+  it('returns 404 for a malformed short code', async () => {
+    const res = await request(app).get('/api/qr/%21%21');
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /', () => {
+  it('serves the dashboard HTML at the root', async () => {
+    const res = await request(app).get('/');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+    expect(res.text).toContain('shortlink');
+    expect(res.text).toContain('/api/shorten');
+  });
+});

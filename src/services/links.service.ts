@@ -196,6 +196,73 @@ export async function incrementClickCount(linkId: string): Promise<void> {
   ]);
 }
 
+export interface ListedLink {
+  id: string;
+  longUrl: string;
+  shortCode: string;
+  customAlias: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  clicks: number;
+  shortUrl: string;
+}
+
+export interface ListLinksOptions {
+  limit?: number;
+  offset?: number;
+}
+
+export interface ListLinksResult {
+  items: ListedLink[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+const MAX_LIST_LIMIT = 100;
+const DEFAULT_LIST_LIMIT = 20;
+
+export async function listRecentLinks(
+  options: ListLinksOptions = {},
+): Promise<ListLinksResult> {
+  const env = loadEnv();
+  const limit = Math.min(
+    Math.max(1, Math.floor(options.limit ?? DEFAULT_LIST_LIMIT)),
+    MAX_LIST_LIMIT,
+  );
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+
+  const pool = getPool();
+  const { rows } = await pool.query<LinkRow>(
+    `SELECT id, long_url, short_code, custom_alias, user_id, expires_at, created_at, clicks
+       FROM links
+      WHERE short_code <> ''
+      ORDER BY created_at DESC, id DESC
+      LIMIT $1 OFFSET $2`,
+    [limit, offset],
+  );
+  const { rows: countRows } = await pool.query<{ total: string }>(
+    `SELECT COUNT(*)::text AS total FROM links WHERE short_code <> ''`,
+  );
+  const total = Number(countRows[0]?.total ?? '0');
+
+  return {
+    items: rows.map((row) => ({
+      id: row.id,
+      longUrl: row.long_url,
+      shortCode: row.short_code,
+      customAlias: row.custom_alias,
+      expiresAt: row.expires_at ? row.expires_at.toISOString() : null,
+      createdAt: row.created_at.toISOString(),
+      clicks: Number(row.clicks),
+      shortUrl: `${env.SHORT_BASE_URL}/${row.short_code}`,
+    })),
+    total,
+    limit,
+    offset,
+  };
+}
+
 function isUniqueViolation(err: unknown): boolean {
   return (
     typeof err === 'object' &&
