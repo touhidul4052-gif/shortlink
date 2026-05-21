@@ -26,6 +26,8 @@ docker compose up -d --build
 
 This builds the app image, starts Postgres, runs migrations, and serves the API on `http://localhost:3000`.
 
+> Postgres is published on host port **5433** (not the default 5432) to avoid clashing with a system-installed Postgres. The app container reaches Postgres internally over the docker network, so this only matters if you want to connect from your host machine (e.g. with `psql`).
+
 Useful follow-ups:
 
 ```bash
@@ -83,7 +85,7 @@ curl -I http://localhost:3000/0003e9
 | `PORT`                  | `3000`                                                  | HTTP listen port |
 | `SHORT_BASE_URL`        | `http://localhost:3000`                                 | Used to build `shortUrl` in responses |
 | `REDIRECT_STATUS`       | `302`                                                   | `301` for cacheable permanent redirects |
-| `DATABASE_URL`          | `postgres://shortlink:shortlink@127.0.0.1:5432/shortlink` | Postgres DSN |
+| `DATABASE_URL`          | `postgres://shortlink:shortlink@127.0.0.1:5433/shortlink` | Postgres DSN (matches docker-compose host port) |
 | `SHORT_CODE_MIN_LENGTH` | `6`                                                     | Pads generated codes with leading `0`s |
 | `SHORT_CODE_ID_OFFSET`  | `1000`                                                  | Skips the first N IDs so codes start at ≥3 distinct chars |
 | `LOG_LEVEL`             | `info`                                                  | pino log level |

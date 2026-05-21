@@ -8,7 +8,9 @@ services:
       POSTGRES_PASSWORD: shortlink
       POSTGRES_DB: shortlink
     ports:
-      - '5432:5432'
+      # Host port 5433 to avoid clashing with a system-installed Postgres on 5432.
+      # The app container connects internally over the docker network on 5432.
+      - '5433:5432'
     volumes:
       - shortlink_pgdata:/var/lib/postgresql/data
     healthcheck:
