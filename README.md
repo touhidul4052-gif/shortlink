@@ -18,20 +18,29 @@ Phase 1 implementation of a custom URL shortener:
 
 ## Quick start
 
+### Option A — Run everything with Docker (no Node toolchain required)
+
 ```bash
-# 1. Install
-npm install
+docker compose up -d --build
+```
 
-# 2. Start Postgres (Docker)
-docker compose up -d postgres
+This builds the app image, starts Postgres, runs migrations, and serves the API on `http://localhost:3000`.
 
-# 3. Configure env
+Useful follow-ups:
+
+```bash
+docker compose logs -f app      # tail the server logs
+docker compose down             # stop both containers (keeps the DB volume)
+docker compose down -v          # stop AND wipe the Postgres volume
+```
+
+### Option B — Local dev (hot reload via `tsx watch`)
+
+```bash
+docker compose up -d postgres   # Postgres only
 cp .env.example .env
-
-# 4. Apply migrations
+npm install
 npm run migrate:up
-
-# 5. Run the dev server
 npm run dev
 ```
 
