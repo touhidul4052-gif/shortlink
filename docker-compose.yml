@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: shortlink-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shortlink
+      POSTGRES_PASSWORD: shortlink
+      POSTGRES_DB: shortlink
+    ports:
+      # Host port 5433 to avoid clashing with a system-installed Postgres on 5432.
+      # The app container connects internally over the docker network on 5432.
+      - '5433:5432'
+    volumes:
+      - shortlink_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U shortlink -d shortlink']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shortlink-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      LOG_LEVEL: info
+      DATABASE_URL: postgres://shortlink:shortlink@postgres:5432/shortlink
+      SHORT_BASE_URL: http://localhost:3000
+      REDIRECT_STATUS: '302'
+      SHORT_CODE_MIN_LENGTH: '6'
+      SHORT_CODE_ID_OFFSET: '1000'
+    ports:
+      - '3000:3000'
+    command: ['sh', '-c', 'npm run migrate:up && node dist/server.js']
+
+volumes:
+  shortlink_pgdata: {}
